@@ -7,11 +7,11 @@ const axios = require("axios")
 
 //----------------------------------1. Connect to the redis server-----------------------------
 const redisClient = redis.createClient(
-  13342,
-  "redis-13342.c301.ap-south-1-1.ec2.cloud.redislabs.com",
+  12187,
+  "redis-12187.c305.ap-south-1-1.ec2.cloud.redislabs.com",
   { no_ready_check: true }
 );
-redisClient.auth("W4JBEi9mAzxjApllYRWwLykeqC3iD9Sn", function (err) {
+redisClient.auth("XqGdPrMEtIiLqjHqCqkDCxPxWuXQMXok", function (err) {
   if (err) throw err
 })
 redisClient.on("connect", async function () {
@@ -23,7 +23,7 @@ const SET_ASYNC = promisify(redisClient.SETEX).bind(redisClient);
 const GET_ASYNC = promisify(redisClient.GET).bind(redisClient)
 
 //----------------------------------POST API for Creating a short URL----------------------
-const makeShortUrl = async function (req, res) {
+const makeShortUrl = async function (req,res){
   try {
     let data = req.body;
     if (Object.keys(data).length == 0)
@@ -35,23 +35,24 @@ const makeShortUrl = async function (req, res) {
     if (!validUrl.isUri(data.longUrl.trim()))
       return res.status(400).send({ status: false, message: "please put a  valid url" });
 
+      
+    let findDataInCache = await GET_ASYNC(data.longUrl);
+    if (findDataInCache) return res.status(201).send({ status: true, data: JSON.parse(findDataInCache) })
+
     let checkUrl = await axios.get(data.longUrl).then(() => data.longUrl).catch(() => null)
     if (!checkUrl) return res.status(400).send({ status: false, message: "please enter a valid URL" })
-
-    let findDataInCache = await GET_ASYNC(data.longUrl);
-    if (findDataInCache) return res.status(200).send({ status: true, data: JSON.parse(findDataInCache) })
 
     let findUrl = await urlModel.findOne({ longUrl: data.longUrl }).select({ longUrl: 1, shortUrl: 1, urlCode: 1, _id: 0 });
     if (findUrl) {
       await SET_ASYNC(data.longUrl, 24 * 60 * 60, JSON.stringify(findUrl))
-      return res.status(200).send({ status: true, data: findUrl })
+      return res.status(201).send({ status: true, data: findUrl })
     };
 
     data.urlCode = shortId.generate().toLowerCase();
-    data.shortUrl = `localhost:3000/${data.urlCode}`;
+    data.shortUrl = `https://localhost:3000/${data.urlCode}`;
     let newShortedUrl = await urlModel.create(data);
-    
-    let { longUrl, shortUrl, urlCode } = newShortedUrl
+   let { longUrl, shortUrl, urlCode } = newShortedUrl
+
     await SET_ASYNC(data.longUrl, 24 * 60 * 60, JSON.stringify({ longUrl, shortUrl, urlCode, }));
     return res.status(201).send({ status: true, data: { longUrl, shortUrl, urlCode } });
   } 
